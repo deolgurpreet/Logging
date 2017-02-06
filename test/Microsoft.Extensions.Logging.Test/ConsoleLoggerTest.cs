@@ -1,16 +1,16 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging.Console;
-using Microsoft.Extensions.Logging.Test.Console;
-using Microsoft.Extensions.Primitives;
-using Moq;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Console;
+using Microsoft.Extensions.Logging.Test.Console;
+using Microsoft.Extensions.Primitives;
+using Moq;
 using Xunit;
 
 namespace Microsoft.Extensions.Logging.Test
@@ -935,44 +935,6 @@ namespace Microsoft.Extensions.Logging.Test
             public IDictionary<string, LogLevel> Switches { get; } = new Dictionary<string, LogLevel>();
 
             public bool IncludeScopes { get; set; }
-
-            public IConsoleLoggerSettings Reload()
-            {
-                return this;
-            }
-
-            public bool TryGetSwitch(string name, out LogLevel level)
-            {
-                return Switches.TryGetValue(name, out level);
-            }
-        }
-
-        private class ThrowConsoleLoggerSettings : IConsoleLoggerSettings
-        {
-            public CancellationTokenSource Cancel { get; set; }
-
-            public IChangeToken ChangeToken => new CancellationChangeToken(Cancel.Token);
-
-            public IDictionary<string, LogLevel> Switches { get; } = new Dictionary<string, LogLevel>();
-
-            public bool ShouldThrow { get; set; }
-
-            private bool _includeScopes;
-            public bool IncludeScopes
-            {
-                get
-                {
-                    if (ShouldThrow)
-                    {
-                        throw new Exception();
-                    }
-                    return _includeScopes;
-                }
-                set
-                {
-                    _includeScopes = value;
-                }
-            }
 
             public IConsoleLoggerSettings Reload()
             {
