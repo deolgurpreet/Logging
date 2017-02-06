@@ -1,14 +1,16 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-using System;
-using System.Linq;
-using System.Collections.Generic;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Logging.Test.Console;
 using Microsoft.Extensions.Primitives;
-using System.Threading;
 using Moq;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
 using Xunit;
 
 namespace Microsoft.Extensions.Logging.Test
@@ -749,6 +751,70 @@ namespace Microsoft.Extensions.Logging.Test
         }
 
         [Fact]
+        public void ConsoleLogger_ReloadSettings_CanRecoverAfterFailedReload()
+        {
+            // Arrange
+            var fileName = Path.GetTempFileName();
+            File.WriteAllText(fileName,
+                @"{
+                    ""LogLevel"": {
+                        ""Test"": ""Information""
+                    }
+                  }");
+            var builder = new ConfigurationBuilder();
+            var configuration = builder.AddJsonFile(fileName, optional: false, reloadOnChange: true).Build();
+
+            var settings = new ConfigurationConsoleLoggerSettings(configuration);
+
+            var loggerFactory = new LoggerFactory();
+            loggerFactory.AddConsole(settings);
+            loggerFactory.AddDebug();
+
+            var logger = loggerFactory.CreateLogger("Test");
+
+            // Act & Assert
+            Assert.True(logger.IsEnabled(LogLevel.Information));
+
+            var reset = new ManualResetEvent(false);
+            var watcher = new FileSystemWatcher(Path.GetDirectoryName(fileName));
+            watcher.EnableRaisingEvents = true;
+            watcher.Changed += new FileSystemEventHandler(delegate (Object o, FileSystemEventArgs e)
+            {
+                if (string.Equals(e.FullPath, fileName))
+                {
+                    reset.Set();
+                }
+            });
+
+            File.WriteAllText(fileName,
+                @"{
+                    ""LogLevel"": {
+                        ""Test"": ""Tracer""
+                    }
+                  }");
+
+            // Wait for reload to trigger
+            Assert.True(reset.WaitOne(1000));
+            Thread.Sleep(500);
+            reset.Reset();
+
+            Assert.True(logger.IsEnabled(LogLevel.Information));
+
+            File.WriteAllText(fileName,
+                @"{
+                    ""LogLevel"": {
+                        ""Test"": ""Trace""
+                    }
+                  }");
+
+            // Wait for reload to trigger
+            Assert.True(reset.WaitOne(1000));
+            Thread.Sleep(500);
+
+            Assert.True(logger.IsEnabled(LogLevel.Trace));
+        }
+
+        [Fact]
         public void WriteCore_NullMessageWithException()
         {
             // Arrange
@@ -869,6 +935,44 @@ namespace Microsoft.Extensions.Logging.Test
             public IDictionary<string, LogLevel> Switches { get; } = new Dictionary<string, LogLevel>();
 
             public bool IncludeScopes { get; set; }
+
+            public IConsoleLoggerSettings Reload()
+            {
+                return this;
+            }
+
+            public bool TryGetSwitch(string name, out LogLevel level)
+            {
+                return Switches.TryGetValue(name, out level);
+            }
+        }
+
+        private class ThrowConsoleLoggerSettings : IConsoleLoggerSettings
+        {
+            public CancellationTokenSource Cancel { get; set; }
+
+            public IChangeToken ChangeToken => new CancellationChangeToken(Cancel.Token);
+
+            public IDictionary<string, LogLevel> Switches { get; } = new Dictionary<string, LogLevel>();
+
+            public bool ShouldThrow { get; set; }
+
+            private bool _includeScopes;
+            public bool IncludeScopes
+            {
+                get
+                {
+                    if (ShouldThrow)
+                    {
+                        throw new Exception();
+                    }
+                    return _includeScopes;
+                }
+                set
+                {
+                    _includeScopes = value;
+                }
+            }
 
             public IConsoleLoggerSettings Reload()
             {
