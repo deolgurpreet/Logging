@@ -3,10 +3,8 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Console;
 using Microsoft.Extensions.Logging.Test.Console;
 using Microsoft.Extensions.Primitives;
@@ -72,8 +70,8 @@ namespace Microsoft.Extensions.Logging.Test
 
             // Assert
             Assert.Equal(6, sink.Writes.Count);
-            Assert.Equal(GetMessage("crit", 0, "[null]", null     ), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
-            Assert.Equal(GetMessage("crit", 0, "[null]", null     ), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
+            Assert.Equal(GetMessage("crit", 0, "[null]", null), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
+            Assert.Equal(GetMessage("crit", 0, "[null]", null), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
             Assert.Equal(GetMessage("crit", 0, "[null]", exception), GetMessage(sink.Writes.GetRange(2 * WritesPerMsg, WritesPerMsg)));
         }
 
@@ -94,7 +92,7 @@ namespace Microsoft.Extensions.Logging.Test
 
             // Assert
             Assert.Equal(8, sink.Writes.Count);
-            Assert.Equal(GetMessage("crit",  0, logMessage, null), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
+            Assert.Equal(GetMessage("crit", 0, logMessage, null), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
             Assert.Equal(GetMessage("crit", 10, logMessage, null), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
             Assert.Equal(GetMessage("crit", 10, logMessage, null), GetMessage(sink.Writes.GetRange(2 * WritesPerMsg, WritesPerMsg)));
             Assert.Equal(GetMessage("crit", 10, logMessage, null), GetMessage(sink.Writes.GetRange(3 * WritesPerMsg, WritesPerMsg)));
@@ -695,7 +693,7 @@ namespace Microsoft.Extensions.Logging.Test
                 Cancel = new CancellationTokenSource(),
                 Switches =
                 {
-                    ["Test"] = LogLevel.Information,
+                    ["Test"] = "Information",
                 }
             };
 
@@ -705,7 +703,7 @@ namespace Microsoft.Extensions.Logging.Test
             var logger = loggerFactory.CreateLogger("Test");
             Assert.False(logger.IsEnabled(LogLevel.Trace));
 
-            settings.Switches["Test"] = LogLevel.Trace;
+            settings.Switches["Test"] = "Trace";
 
             var cancellationTokenSource = settings.Cancel;
             settings.Cancel = new CancellationTokenSource();
@@ -726,7 +724,7 @@ namespace Microsoft.Extensions.Logging.Test
                 Cancel = new CancellationTokenSource(),
                 Switches =
                 {
-                    ["Test"] = LogLevel.Information,
+                    ["Test"] = "Information",
                 }
             };
 
@@ -739,7 +737,7 @@ namespace Microsoft.Extensions.Logging.Test
             // Act & Assert
             for (var i = 0; i < 10; i++)
             {
-                settings.Switches["Test"] = i % 2 == 0 ? LogLevel.Information : LogLevel.Trace;
+                settings.Switches["Test"] = i % 2 == 0 ? "Information" : "Trace";
 
                 var cancellationTokenSource = settings.Cancel;
                 settings.Cancel = new CancellationTokenSource();
@@ -754,17 +752,14 @@ namespace Microsoft.Extensions.Logging.Test
         public void ConsoleLogger_ReloadSettings_CanRecoverAfterFailedReload()
         {
             // Arrange
-            var fileName = Path.GetTempFileName();
-            File.WriteAllText(fileName,
-                @"{
-                    ""LogLevel"": {
-                        ""Test"": ""Information""
-                    }
-                  }");
-            var builder = new ConfigurationBuilder();
-            var configuration = builder.AddJsonFile(fileName, optional: false, reloadOnChange: true).Build();
-
-            var settings = new ConfigurationConsoleLoggerSettings(configuration);
+            var settings = new MockConsoleLoggerSettings()
+            {
+                Cancel = new CancellationTokenSource(),
+                Switches =
+                {
+                    ["Test"] = "Information",
+                }
+            };
 
             var loggerFactory = new LoggerFactory();
             loggerFactory.AddConsole(settings);
@@ -775,41 +770,23 @@ namespace Microsoft.Extensions.Logging.Test
             // Act & Assert
             Assert.True(logger.IsEnabled(LogLevel.Information));
 
-            var reset = new ManualResetEvent(false);
-            var watcher = new FileSystemWatcher(Path.GetDirectoryName(fileName));
-            watcher.EnableRaisingEvents = true;
-            watcher.Changed += new FileSystemEventHandler(delegate (Object o, FileSystemEventArgs e)
-            {
-                if (string.Equals(e.FullPath, fileName))
-                {
-                    reset.Set();
-                }
-            });
+            settings.Switches["Test"] = "InvalidLevel";
 
-            File.WriteAllText(fileName,
-                @"{
-                    ""LogLevel"": {
-                        ""Test"": ""Tracer""
-                    }
-                  }");
+            // Trigger reload
+            var cancellationTokenSource = settings.Cancel;
+            settings.Cancel = new CancellationTokenSource();
 
-            // Wait for reload to trigger
-            Assert.True(reset.WaitOne(1000));
-            Thread.Sleep(500);
-            reset.Reset();
+            cancellationTokenSource.Cancel();
 
-            Assert.True(logger.IsEnabled(LogLevel.Information));
+            Assert.False(logger.IsEnabled(LogLevel.Trace));
 
-            File.WriteAllText(fileName,
-                @"{
-                    ""LogLevel"": {
-                        ""Test"": ""Trace""
-                    }
-                  }");
+            settings.Switches["Test"] = "Trace";
 
-            // Wait for reload to trigger
-            Assert.True(reset.WaitOne(1000));
-            Thread.Sleep(500);
+            // Trigger reload
+            cancellationTokenSource = settings.Cancel;
+            settings.Cancel = new CancellationTokenSource();
+
+            cancellationTokenSource.Cancel();
 
             Assert.True(logger.IsEnabled(LogLevel.Trace));
         }
@@ -932,7 +909,7 @@ namespace Microsoft.Extensions.Logging.Test
 
             public IChangeToken ChangeToken => new CancellationChangeToken(Cancel.Token);
 
-            public IDictionary<string, LogLevel> Switches { get; } = new Dictionary<string, LogLevel>();
+            public IDictionary<string, string> Switches { get; } = new Dictionary<string, string>();
 
             public bool IncludeScopes { get; set; }
 
@@ -943,7 +920,12 @@ namespace Microsoft.Extensions.Logging.Test
 
             public bool TryGetSwitch(string name, out LogLevel level)
             {
-                return Switches.TryGetValue(name, out level);
+                if (Enum.TryParse(Switches[name], out level))
+                {
+                    return true;
+                }
+
+                throw new Exception("Failed to parse LogLevel");
             }
         }
     }
