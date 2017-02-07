@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Microsoft.Extensions.Logging.Internal
@@ -15,7 +14,7 @@ namespace Microsoft.Extensions.Logging.Internal
     public class FormattedLogValues : IReadOnlyList<KeyValuePair<string, object>>
     {
         private const string NullFormat = "[null]";
-        private static ConcurrentDictionary<string, LogValuesFormatter> _formatters = new ConcurrentDictionary<string, LogValuesFormatter>();
+        private static ConcurrentLruCache<string, LogValuesFormatter> _formatters = new ConcurrentLruCache<string, LogValuesFormatter>(1024);
         private readonly LogValuesFormatter _formatter;
         private readonly object[] _values;
         private readonly string _originalMessage;
@@ -24,7 +23,7 @@ namespace Microsoft.Extensions.Logging.Internal
         {
             if (values?.Length != 0 && format != null)
             {
-                _formatter = _formatters.GetOrAdd(format, f => new LogValuesFormatter(f));
+                _formatter = _formatters.GetOrAdd(format, format, f => new LogValuesFormatter(f));
             }
 
             _originalMessage = format ?? NullFormat;
