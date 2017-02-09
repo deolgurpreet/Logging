@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Concurrent;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,18 +11,14 @@ namespace Microsoft.Extensions.Logging.Console.Internal
     public class ConsoleLoggerProcessor
     {
         private const int _maxQueuedMessages = 1024;
+        // Writing to console is not an atomic operation in the current implementation and since multiple logger 
+        // instances are created with a different name. Also since Console is global, using a static lock is fine. 
+        private static readonly object _lock = new object();
 
         private IConsole _console;
 
-        private readonly SemaphoreSlim _semaphore = new SemaphoreSlim(0);
-        private readonly ConcurrentQueue<LogMessageEntry> _messageQueue = new ConcurrentQueue<LogMessageEntry>();
+        private readonly BlockingCollection<LogMessageEntry> _messageQueue = new BlockingCollection<LogMessageEntry>(_maxQueuedMessages);
         private readonly Task _outputTask;
-
-        private readonly ManualResetEventSlim _backpressure = new ManualResetEventSlim(true);
-        private readonly object _countLock = new object();
-
-        private int _queuedMessageCount;
-        private bool _isShuttingDown = false;
 
         public ConsoleLoggerProcessor()
         {
@@ -50,111 +45,27 @@ namespace Microsoft.Extensions.Logging.Console.Internal
             }
         }
 
-        public bool HasQueuedMessages => !_messageQueue.IsEmpty;
+        public bool HasQueuedMessages => _messageQueue.Count > 0;
 
         public void EnqueueMessage(LogMessageEntry message)
         {
-            ApplyBackpressure();
-
-            _messageQueue.Enqueue(message);
-
-            WakeupProcessor();
+            _messageQueue.Add(message);
         }
 
         private void ProcessLogQueue()
         {
-            bool isShuttingDown;
-            do
+            foreach (var message in _messageQueue.GetConsumingEnumerable())
             {
-                isShuttingDown = WaitForNewMessages();
-
-                OutputQueuedMessages();
-
-            } while (!isShuttingDown);
-        }
-
-        private bool WaitForNewMessages()
-        {
-            if (_messageQueue.IsEmpty && !Volatile.Read(ref _isShuttingDown))
-            {
-                // No messages; wait for new messages
-                _semaphore.Wait();
-            }
-
-            return Volatile.Read(ref _isShuttingDown);
-        }
-
-        private void OutputQueuedMessages()
-        {
-            var messagesOutput = 0;
-            LogMessageEntry message;
-            while (_messageQueue.TryDequeue(out message))
-            {
-                if (message.LevelString != null)
+                lock (_lock)
                 {
-                    Console.Write(message.LevelString, message.LevelBackground, message.LevelForeground);
-                }
-
-                Console.Write(message.Message, message.MessageColor, message.MessageColor);
-                messagesOutput++;
-            }
-
-            if (messagesOutput > 0)
-            {
-                // In case of AnsiLogConsole, the messages are not yet written to the console, flush them
-                Console.Flush();
-
-                ReleaseBackpressure(messagesOutput);
-            }
-        }
-
-        private void WakeupProcessor()
-        {
-            if (_semaphore.CurrentCount == 0)
-            {
-                // Console output Task may be asleep, wake it up
-                _semaphore.Release();
-            }
-        }
-
-        private void ApplyBackpressure()
-        {
-            do
-            {
-                // Check if back pressure applied
-                _backpressure.Wait();
-
-                lock (_countLock)
-                {
-                    var messageCount = _queuedMessageCount + 1;
-                    if (messageCount <= _maxQueuedMessages)
+                    if (message.LevelString != null)
                     {
-                        _queuedMessageCount = messageCount;
-                        if (messageCount == _maxQueuedMessages)
-                        {
-                            // Next message would put the queue over max, set blocking
-                            _backpressure.Reset();
-                        }
-
-                        // Exit and queue message
-                        break;
+                        Console.Write(message.LevelString, message.LevelBackground, message.LevelForeground);
                     }
-                }
 
-            } while (true);
-        }
-
-        private void ReleaseBackpressure(int messagesOutput)
-        {
-            lock (_countLock)
-            {
-                if (_queuedMessageCount >= _maxQueuedMessages &&
-                    _queuedMessageCount - messagesOutput < _maxQueuedMessages)
-                {
-                    // Was blocked, unblock
-                    _backpressure.Set();
+                    Console.Write(message.Message, message.MessageColor, message.MessageColor);
+                    Console.Flush();
                 }
-                _queuedMessageCount -= messagesOutput;
             }
         }
 
@@ -184,8 +95,9 @@ namespace Microsoft.Extensions.Logging.Console.Internal
         private void InitiateShutdown()
 #endif
         {
-            _isShuttingDown = true;
-            _semaphore.Release(); // Fast wake up vs cts
+            // TODO: Do after _outputTask.Wait(...) in case there are items blocked on getting added?
+            _messageQueue.CompleteAdding();
+
             try
             {
                 _outputTask.Wait(1500); // with timeout in-case Console is locked by user input
