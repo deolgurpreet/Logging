@@ -45,8 +45,6 @@ namespace Microsoft.Extensions.Logging.Console.Internal
             }
         }
 
-        public bool HasQueuedMessages => _messageQueue.Count > 0;
-
         public void EnqueueMessage(LogMessageEntry message)
         {
             _messageQueue.Add(message);

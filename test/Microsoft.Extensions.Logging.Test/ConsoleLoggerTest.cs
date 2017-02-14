@@ -59,22 +59,21 @@ namespace Microsoft.Extensions.Logging.Test
         {
             // Arrange
             var callbackMre = new ManualResetEventSlim(false);
-            var logMre = new ManualResetEventSlim(false);
             var t = SetUp(null);
             var logger = (ILogger)t.Item1;
             var sink = t.Item2;
             var exception = new InvalidOperationException("Invalid value");
-
+            var flushCount = 0;
+            var logCount = 3;
 
             ((TestConsole)t.Item1.Console).OnFlush = () =>
             {
-                logMre.Wait();
-                if (!t.Item1.HasQueuedMessages)
+                if (Interlocked.Increment(ref flushCount) == logCount)
                 {
                     // Assert
-                    Assert.Equal(6, sink.Writes.Count);
-                    Assert.Equal(GetMessage("crit", 0, "[null]", null     ), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
-                    Assert.Equal(GetMessage("crit", 0, "[null]", null     ), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
+                    Assert.Equal(logCount * WritesPerMsg, sink.Writes.Count);
+                    Assert.Equal(GetMessage("crit", 0, "[null]", null), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
+                    Assert.Equal(GetMessage("crit", 0, "[null]", null), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("crit", 0, "[null]", exception), GetMessage(sink.Writes.GetRange(2 * WritesPerMsg, WritesPerMsg)));
                     callbackMre.Set();
                 }
@@ -84,7 +83,6 @@ namespace Microsoft.Extensions.Logging.Test
             logger.LogCritical(eventId: 0, exception: null, message: null);
             logger.LogCritical(eventId: 0, message: null);
             logger.LogCritical(eventId: 0, message: null, exception: exception);
-            logMre.Set();
             WaitForFlush(callbackMre);
         }
 
@@ -93,32 +91,32 @@ namespace Microsoft.Extensions.Logging.Test
         {
             // Arrange
             var callbackMre = new ManualResetEventSlim(false);
-            var logMre = new ManualResetEventSlim(false);
             var t = SetUp(null);
             var logger = (ILogger)t.Item1;
             var sink = t.Item2;
             var logMessage = "Route with name 'Default' was not found.";
+            var flushCount = 0;
+            var logCount = 4;
 
             ((TestConsole)t.Item1.Console).OnFlush = () =>
             {
-                logMre.Wait();
-                if (!t.Item1.HasQueuedMessages)
+                if (Interlocked.Increment(ref flushCount) == logCount)
                 {
                     // Assert
-                    Assert.Equal(8, sink.Writes.Count);
-                    Assert.Equal(GetMessage("crit",  0, logMessage, null), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
+                    Assert.Equal(logCount * WritesPerMsg, sink.Writes.Count);
+                    Assert.Equal(GetMessage("crit", 0, logMessage, null), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("crit", 10, logMessage, null), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("crit", 10, logMessage, null), GetMessage(sink.Writes.GetRange(2 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("crit", 10, logMessage, null), GetMessage(sink.Writes.GetRange(3 * WritesPerMsg, WritesPerMsg)));
                     callbackMre.Set();
                 }
             };
+
             // Act
             logger.LogCritical(logMessage);
             logger.LogCritical(eventId: 10, message: logMessage, exception: null);
             logger.LogCritical(eventId: 10, message: logMessage);
             logger.LogCritical(eventId: 10, message: logMessage, exception: null);
-            logMre.Set();
             WaitForFlush(callbackMre);
         }
 
@@ -199,18 +197,18 @@ namespace Microsoft.Extensions.Logging.Test
             var logger = t.Item1;
             var sink = t.Item2;
 
-            // Act
-            logger.Log(LogLevel.Warning, 0, _state, null, _defaultFormatter);
-
-            Assert.Equal(false, logger.HasQueuedMessages);
-            Assert.Equal(0, sink.Writes.Count);
-
             ((TestConsole)logger.Console).OnFlush = () =>
             {
                 // Assert
                 Assert.Equal(2, sink.Writes.Count);
                 mre.Set();
             };
+
+            // Act
+            logger.Log(LogLevel.Warning, 0, _state, null, _defaultFormatter);
+
+            // Assert
+            Assert.Equal(0, sink.Writes.Count);
 
             // Act
             logger.Log(LogLevel.Critical, 0, _state, null, _defaultFormatter);
@@ -226,19 +224,19 @@ namespace Microsoft.Extensions.Logging.Test
             var logger = t.Item1;
             var sink = t.Item2;
 
-            // Act
-            logger.Log(LogLevel.Warning, 0, _state, null, null);
-
-            // Assert
-            Assert.Equal(false, logger.HasQueuedMessages);
-            Assert.Equal(0, sink.Writes.Count);
-
             ((TestConsole)logger.Console).OnFlush = () =>
             {
                 // Assert
                 Assert.Equal(2, sink.Writes.Count);
                 mre.Set();
             };
+
+            // Act
+            logger.Log(LogLevel.Warning, 0, _state, null, null);
+
+            // Assert
+            Assert.Equal(0, sink.Writes.Count);
+
             // Act
             logger.Log(LogLevel.Error, 0, _state, null, _defaultFormatter);
             WaitForFlush(mre);
@@ -253,19 +251,19 @@ namespace Microsoft.Extensions.Logging.Test
             var logger = t.Item1;
             var sink = t.Item2;
 
-            // Act
-            logger.Log(LogLevel.Information, 0, _state, null, null);
-
-            // Assert
-            Assert.Equal(false, logger.HasQueuedMessages);
-            Assert.Equal(0, sink.Writes.Count);
-
             ((TestConsole)logger.Console).OnFlush = () =>
             {
                 // Assert
                 Assert.Equal(2, sink.Writes.Count);
                 mre.Set();
             };
+
+            // Act
+            logger.Log(LogLevel.Information, 0, _state, null, null);
+
+            // Assert
+            Assert.Equal(0, sink.Writes.Count);
+
             // Act
             logger.Log(LogLevel.Warning, 0, _state, null, _defaultFormatter);
             WaitForFlush(mre);
@@ -280,19 +278,19 @@ namespace Microsoft.Extensions.Logging.Test
             var logger = t.Item1;
             var sink = t.Item2;
 
-            // Act
-            logger.Log(LogLevel.Debug, 0, _state, null, null);
-
-            // Assert
-            Assert.Equal(false, logger.HasQueuedMessages);
-            Assert.Equal(0, sink.Writes.Count);
-
             ((TestConsole)logger.Console).OnFlush = () =>
             {
                 // Assert
                 Assert.Equal(2, sink.Writes.Count);
                 mre.Set();
             };
+
+            // Act
+            logger.Log(LogLevel.Debug, 0, _state, null, null);
+
+            // Assert
+            Assert.Equal(0, sink.Writes.Count);
+
             // Act
             logger.Log(LogLevel.Information, 0, _state, null, _defaultFormatter);
             WaitForFlush(mre);
@@ -307,19 +305,19 @@ namespace Microsoft.Extensions.Logging.Test
             var logger = t.Item1;
             var sink = t.Item2;
 
-            // Act
-            logger.Log(LogLevel.Trace, 0, _state, null, null);
-
-            // Assert
-            Assert.Equal(false, logger.HasQueuedMessages);
-            Assert.Equal(0, sink.Writes.Count);
-
             ((TestConsole)logger.Console).OnFlush = () =>
             {
                 // Assert
                 Assert.Equal(2, sink.Writes.Count);
                 mre.Set();
             };
+
+            // Act
+            logger.Log(LogLevel.Trace, 0, _state, null, null);
+
+            // Assert
+            Assert.Equal(0, sink.Writes.Count);
+
             // Act
             logger.Log(LogLevel.Debug, 0, _state, null, _defaultFormatter);
             WaitForFlush(mre);
@@ -330,18 +328,18 @@ namespace Microsoft.Extensions.Logging.Test
         {
             // Arrange
             var callbackMre = new ManualResetEventSlim(false);
-            var logMre = new ManualResetEventSlim(false);
             var t = SetUp((category, logLevel) => logLevel >= LogLevel.Trace);
             var logger = t.Item1;
             var sink = t.Item2;
+            var flushCount = 0;
+            var logCount = 6;
 
             ((TestConsole)logger.Console).OnFlush = () =>
             {
-                logMre.Wait();
-                if (!logger.HasQueuedMessages)
+                if (Interlocked.Increment(ref flushCount) == logCount)
                 {
                     // Assert
-                    Assert.Equal(12, sink.Writes.Count);
+                    Assert.Equal(logCount * WritesPerMsg, sink.Writes.Count);
                     callbackMre.Set();
                 }
             };
@@ -353,7 +351,6 @@ namespace Microsoft.Extensions.Logging.Test
             logger.Log(LogLevel.Information, 0, _state, null, _defaultFormatter);
             logger.Log(LogLevel.Debug, 0, _state, null, _defaultFormatter);
             logger.Log(LogLevel.Trace, 0, _state, null, _defaultFormatter);
-            logMre.Set();
             WaitForFlush(callbackMre);
         }
 
@@ -524,19 +521,19 @@ namespace Microsoft.Extensions.Logging.Test
         {
             // Arrange
             var callbackMre = new ManualResetEventSlim(false);
-            var logMre = new ManualResetEventSlim(false);
             var t = SetUp(null);
             var logger = t.Item1;
             var sink = t.Item2;
             var ex = new Exception("Exception message" + Environment.NewLine + "with a second line");
+            var flushCount = 0;
+            var logCount = 6;
 
             ((TestConsole)logger.Console).OnFlush = () =>
             {
-                logMre.Wait();
-                if (!logger.HasQueuedMessages)
-                { 
+                if (Interlocked.Increment(ref flushCount) == logCount)
+                {
                     // Assert
-                    Assert.Equal(12, sink.Writes.Count);
+                    Assert.Equal(logCount * WritesPerMsg, sink.Writes.Count);
                     Assert.Equal(GetMessage("crit", 0, ex), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("fail", 0, ex), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("warn", 0, ex), GetMessage(sink.Writes.GetRange(2 * WritesPerMsg, WritesPerMsg)));
@@ -554,7 +551,6 @@ namespace Microsoft.Extensions.Logging.Test
             logger.Log(LogLevel.Information, 0, _state, ex, _defaultFormatter);
             logger.Log(LogLevel.Debug, 0, _state, ex, _defaultFormatter);
             logger.Log(LogLevel.Trace, 0, _state, ex, _defaultFormatter);
-            logMre.Set();
             WaitForFlush(callbackMre);
         }
 
@@ -733,7 +729,6 @@ namespace Microsoft.Extensions.Logging.Test
         {
             // Arrange
             var callbackMre = new ManualResetEventSlim(false);
-            var logMre = new ManualResetEventSlim(false);
             var t = SetUp(filter: null, includeScopes: true);
             var logger = t.Item1;
             var sink = t.Item2;
@@ -747,14 +742,15 @@ namespace Microsoft.Extensions.Logging.Test
                 _paddingString
                 + "=> RequestId: 100 => Created product: Car"
                 + Environment.NewLine;
+            var flushCount = 0;
+            var logCount = 2;
 
             ((TestConsole)logger.Console).OnFlush = () =>
             {
-                logMre.Wait();
-                if (!logger.HasQueuedMessages)
+                if (Interlocked.Increment(ref flushCount) == logCount)
                 {
                     // Assert
-                    Assert.Equal(4, sink.Writes.Count);
+                    Assert.Equal(logCount * WritesPerMsg, sink.Writes.Count);
                     // scope
                     var write = sink.Writes[1];
                     Assert.Equal(expectedHeader + expectedScope1 + expectedMessage, write.Message);
@@ -781,7 +777,6 @@ namespace Microsoft.Extensions.Logging.Test
                     logger.Log(LogLevel.Information, 0, _state, null, _defaultFormatter);
                 }
             }
-            logMre.Set();
             WaitForFlush(callbackMre);
         }
 
@@ -930,21 +925,21 @@ namespace Microsoft.Extensions.Logging.Test
         {
             // Arrange
             var callbackMre = new ManualResetEventSlim(false);
-            var logMre = new ManualResetEventSlim(false);
             var t = SetUp(null);
             var logger = t.Item1;
             var sink = t.Item2;
             var ex = new Exception("Exception message" + Environment.NewLine + "with a second line");
             string message = null;
             var expected = ex.ToString() + Environment.NewLine;
+            var flushCount = 0;
+            var logCount = 6;
 
             ((TestConsole)logger.Console).OnFlush = () =>
             {
-                logMre.Wait();
-                if (!logger.HasQueuedMessages)
+                if (Interlocked.Increment(ref flushCount) == logCount)
                 {
                     // Assert
-                    Assert.Equal(6, sink.Writes.Count);
+                    Assert.Equal(logCount, sink.Writes.Count);
                     Assert.Equal(expected, sink.Writes[0].Message);
                     Assert.Equal(expected, sink.Writes[1].Message);
                     Assert.Equal(expected, sink.Writes[2].Message);
@@ -962,7 +957,6 @@ namespace Microsoft.Extensions.Logging.Test
             logger.Log(LogLevel.Information, 0, message, ex, (s,e) => s);
             logger.Log(LogLevel.Debug, 0, message, ex, (s,e) => s);
             logger.Log(LogLevel.Trace, 0, message, ex, (s,e) => s);
-            logMre.Set();
             WaitForFlush(callbackMre);
         }
 
@@ -971,19 +965,19 @@ namespace Microsoft.Extensions.Logging.Test
         {
             // Arrange
             var callbackMre = new ManualResetEventSlim(false);
-            var logMre = new ManualResetEventSlim(false);
             var t = SetUp(null);
             var logger = t.Item1;
             var sink = t.Item2;
             Exception ex = null;
+            var flushCount = 0;
+            var logCount = 6;
 
             ((TestConsole)logger.Console).OnFlush = () =>
             {
-                logMre.Wait();
-                if (!logger.HasQueuedMessages)
+                if (Interlocked.Increment(ref flushCount) == logCount)
                 {
                     // Assert
-                    Assert.Equal(12, sink.Writes.Count);
+                    Assert.Equal(logCount * WritesPerMsg, sink.Writes.Count);
                     Assert.Equal(GetMessage("crit", 0, ex), GetMessage(sink.Writes.GetRange(0 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("fail", 0, ex), GetMessage(sink.Writes.GetRange(1 * WritesPerMsg, WritesPerMsg)));
                     Assert.Equal(GetMessage("warn", 0, ex), GetMessage(sink.Writes.GetRange(2 * WritesPerMsg, WritesPerMsg)));
@@ -1001,7 +995,6 @@ namespace Microsoft.Extensions.Logging.Test
             logger.Log(LogLevel.Information, 0, _state, ex, (s,e) => s);
             logger.Log(LogLevel.Debug, 0, _state, ex, (s,e) => s);
             logger.Log(LogLevel.Trace, 0, _state, ex, (s,e) => s);
-            logMre.Set();
             WaitForFlush(callbackMre);
         }
 
@@ -1015,6 +1008,11 @@ namespace Microsoft.Extensions.Logging.Test
             Exception ex = null;
             string message = null;
 
+            ((TestConsole)logger.Console).OnFlush = () =>
+            {
+                Assert.True(false);
+            };
+
             // Act
             logger.Log(LogLevel.Critical, 0, message, ex, (s,e) => s);
             logger.Log(LogLevel.Error, 0, message, ex, (s,e) => s);
@@ -1024,7 +1022,6 @@ namespace Microsoft.Extensions.Logging.Test
             logger.Log(LogLevel.Trace, 0, message, ex, (s,e) => s);
 
             // Assert
-            Assert.Equal(false, logger.HasQueuedMessages);
             Assert.Equal(0, sink.Writes.Count);
         }
 
