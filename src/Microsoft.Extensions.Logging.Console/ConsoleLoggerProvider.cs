@@ -59,10 +59,7 @@ namespace Microsoft.Extensions.Logging.Console
             }
             catch (Exception ex)
             {
-                foreach (var logger in _loggers.Values)
-                {
-                    logger.LogError(0, ex, "Error while loading configuration changes.");
-                }
+                System.Console.WriteLine($"Error while loading configuration changes.{Environment.NewLine}{ex}");
             }
             finally
             {
