@@ -14,6 +14,8 @@ namespace Microsoft.Extensions.Logging.Console.Internal
         private readonly BlockingCollection<LogMessageEntry> _messageQueue = new BlockingCollection<LogMessageEntry>(_maxQueuedMessages);
         private readonly Task _outputTask;
 
+        public IConsole Console;
+
         public ConsoleLoggerProcessor()
         {
             // Start Console message queue processor
@@ -34,11 +36,11 @@ namespace Microsoft.Extensions.Logging.Console.Internal
             {
                 if (message.LevelString != null)
                 {
-                    message.Console.Write(message.LevelString, message.LevelBackground, message.LevelForeground);
+                    Console.Write(message.LevelString, message.LevelBackground, message.LevelForeground);
                 }
 
-                message.Console.Write(message.Message, message.MessageColor, message.MessageColor);
-                message.Console.Flush();
+                Console.Write(message.Message, message.MessageColor, message.MessageColor);
+                Console.Flush();
             }
         }
 

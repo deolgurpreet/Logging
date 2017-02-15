@@ -7,7 +7,6 @@ namespace Microsoft.Extensions.Logging.Console.Internal
 {
     public struct LogMessageEntry
     {
-        public IConsole Console;
         public string LevelString;
         public ConsoleColor? LevelBackground;
         public ConsoleColor? LevelForeground;

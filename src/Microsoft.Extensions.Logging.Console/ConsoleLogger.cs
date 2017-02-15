@@ -19,7 +19,6 @@ namespace Microsoft.Extensions.Logging.Console
 
         internal ConsoleLoggerProcessor QueueProcessor;
         private Func<string, LogLevel, bool> _filter;
-        private IConsole _console;
 
         [ThreadStatic]
         private static StringBuilder _logBuilder;
@@ -54,7 +53,7 @@ namespace Microsoft.Extensions.Logging.Console
 
         public IConsole Console
         {
-            get { return _console; }
+            get { return QueueProcessor.Console; }
             set
             {
                 if (value == null)
@@ -62,7 +61,7 @@ namespace Microsoft.Extensions.Logging.Console
                     throw new ArgumentNullException(nameof(value));
                 }
 
-                _console = value;
+                QueueProcessor.Console = value;
             }
         }
 
@@ -161,8 +160,7 @@ namespace Microsoft.Extensions.Logging.Console
                     MessageColor = DefaultConsoleColor,
                     LevelString = hasLevel ? logLevelString : null,
                     LevelBackground = hasLevel ? logLevelColors.Background : null,
-                    LevelForeground = hasLevel ? logLevelColors.Foreground : null,
-                    Console = Console
+                    LevelForeground = hasLevel ? logLevelColors.Foreground : null
                 });
             }
 
