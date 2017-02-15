@@ -46,6 +46,8 @@ namespace Microsoft.Extensions.Logging.Console
             Filter = filter ?? ((category, logLevel) => true);
             IncludeScopes = includeScopes;
 
+            _queueProcessor = loggerProcessor;
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 Console = new WindowsLogConsole();
@@ -54,8 +56,6 @@ namespace Microsoft.Extensions.Logging.Console
             {
                 Console = new AnsiLogConsole(new AnsiSystemConsole());
             }
-
-            _queueProcessor = loggerProcessor;
         }
 
         public IConsole Console
