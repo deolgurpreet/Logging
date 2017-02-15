@@ -71,10 +71,7 @@ namespace Microsoft.Extensions.Logging.Console
 
         private ConsoleLogger CreateLoggerImplementation(string name)
         {
-            return new ConsoleLogger(name, GetFilter(name, _settings), _settings.IncludeScopes)
-            {
-                QueueProcessor = _messageQueue
-            };
+            return new ConsoleLogger(name, GetFilter(name, _settings), _settings.IncludeScopes, _messageQueue);
         }
 
         private Func<string, LogLevel, bool> GetFilter(string name, IConsoleLoggerSettings settings)

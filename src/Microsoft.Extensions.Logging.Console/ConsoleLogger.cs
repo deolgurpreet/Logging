@@ -17,7 +17,7 @@ namespace Microsoft.Extensions.Logging.Console
         // ConsoleColor does not have a value to specify the 'Default' color
         private readonly ConsoleColor? DefaultConsoleColor = null;
 
-        internal ConsoleLoggerProcessor QueueProcessor;
+        private ConsoleLoggerProcessor _queueProcessor;
         private Func<string, LogLevel, bool> _filter;
 
         [ThreadStatic]
@@ -31,6 +31,11 @@ namespace Microsoft.Extensions.Logging.Console
         }
 
         public ConsoleLogger(string name, Func<string, LogLevel, bool> filter, bool includeScopes)
+            : this(name, filter, includeScopes, new ConsoleLoggerProcessor())
+        {
+        }
+
+        internal ConsoleLogger(string name, Func<string, LogLevel, bool> filter, bool includeScopes, ConsoleLoggerProcessor loggerProcessor)
         {
             if (name == null)
             {
@@ -49,11 +54,13 @@ namespace Microsoft.Extensions.Logging.Console
             {
                 Console = new AnsiLogConsole(new AnsiSystemConsole());
             }
+
+            _queueProcessor = loggerProcessor;
         }
 
         public IConsole Console
         {
-            get { return QueueProcessor.Console; }
+            get { return _queueProcessor.Console; }
             set
             {
                 if (value == null)
@@ -61,7 +68,7 @@ namespace Microsoft.Extensions.Logging.Console
                     throw new ArgumentNullException(nameof(value));
                 }
 
-                QueueProcessor.Console = value;
+                _queueProcessor.Console = value;
             }
         }
 
@@ -154,7 +161,7 @@ namespace Microsoft.Extensions.Logging.Console
             {
                 var hasLevel = !string.IsNullOrEmpty(logLevelString);
                 // Queue log message
-                QueueProcessor.EnqueueMessage(new LogMessageEntry()
+                _queueProcessor.EnqueueMessage(new LogMessageEntry()
                 {
                     Message = logBuilder.ToString(),
                     MessageColor = DefaultConsoleColor,
