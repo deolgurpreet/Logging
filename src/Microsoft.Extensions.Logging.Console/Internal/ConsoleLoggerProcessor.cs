@@ -3,46 +3,24 @@
 
 using System;
 using System.Collections.Concurrent;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace Microsoft.Extensions.Logging.Console.Internal
 {
-    public class ConsoleLoggerProcessor
+    public class ConsoleLoggerProcessor : IDisposable
     {
         private const int _maxQueuedMessages = 1024;
-        // Writing to console is not an atomic operation in the current implementation and since multiple logger 
-        // instances are created with a different name. Also since Console is global, using a static lock is fine. 
-        private static readonly object _lock = new object();
-
-        private IConsole _console;
 
         private readonly BlockingCollection<LogMessageEntry> _messageQueue = new BlockingCollection<LogMessageEntry>(_maxQueuedMessages);
         private readonly Task _outputTask;
 
         public ConsoleLoggerProcessor()
         {
-            RegisterForExit();
-
             // Start Console message queue processor
             _outputTask = Task.Factory.StartNew(
                 ProcessLogQueue,
                 this,
                 TaskCreationOptions.LongRunning);
-        }
-
-        public IConsole Console
-        {
-            get { return _console; }
-            set
-            {
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(value));
-                }
-
-                _console = value;
-            }
         }
 
         public void EnqueueMessage(LogMessageEntry message)
@@ -54,16 +32,13 @@ namespace Microsoft.Extensions.Logging.Console.Internal
         {
             foreach (var message in _messageQueue.GetConsumingEnumerable())
             {
-                lock (_lock)
+                if (message.LevelString != null)
                 {
-                    if (message.LevelString != null)
-                    {
-                        Console.Write(message.LevelString, message.LevelBackground, message.LevelForeground);
-                    }
-
-                    Console.Write(message.Message, message.MessageColor, message.MessageColor);
-                    Console.Flush();
+                    message.Console.Write(message.LevelString, message.LevelBackground, message.LevelForeground);
                 }
+
+                message.Console.Write(message.Message, message.MessageColor, message.MessageColor);
+                message.Console.Flush();
             }
         }
 
@@ -74,26 +49,8 @@ namespace Microsoft.Extensions.Logging.Console.Internal
             consoleLogger.ProcessLogQueue();
         }
 
-        private void RegisterForExit()
+        public void Dispose()
         {
-            // Hooks to detect Process exit, and allow the Console to complete output
-#if NET451
-            AppDomain.CurrentDomain.ProcessExit += InitiateShutdown;
-#elif NETSTANDARD1_5
-            var currentAssembly = typeof(ConsoleLogger).GetTypeInfo().Assembly;
-            System.Runtime.Loader.AssemblyLoadContext.GetLoadContext(currentAssembly).Unloading += InitiateShutdown;
-#endif
-        }
-
-#if NET451
-        private void InitiateShutdown(object sender, EventArgs e)
-#elif NETSTANDARD1_5
-        private void InitiateShutdown(System.Runtime.Loader.AssemblyLoadContext obj)
-#else
-        private void InitiateShutdown()
-#endif
-        {
-            // TODO: Do after _outputTask.Wait(...) in case there are items blocked on getting added?
             _messageQueue.CompleteAdding();
 
             try

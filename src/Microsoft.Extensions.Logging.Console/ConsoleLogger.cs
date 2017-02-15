@@ -17,8 +17,9 @@ namespace Microsoft.Extensions.Logging.Console
         // ConsoleColor does not have a value to specify the 'Default' color
         private readonly ConsoleColor? DefaultConsoleColor = null;
 
-        private readonly ConsoleLoggerProcessor _queueProcessor = new ConsoleLoggerProcessor();
+        internal ConsoleLoggerProcessor QueueProcessor;
         private Func<string, LogLevel, bool> _filter;
+        private IConsole _console;
 
         [ThreadStatic]
         private static StringBuilder _logBuilder;
@@ -53,8 +54,16 @@ namespace Microsoft.Extensions.Logging.Console
 
         public IConsole Console
         {
-            get { return _queueProcessor.Console; }
-            set { _queueProcessor.Console = value; }
+            get { return _console; }
+            set
+            {
+                if (value == null)
+                {
+                    throw new ArgumentNullException(nameof(value));
+                }
+
+                _console = value;
+            }
         }
 
         public Func<string, LogLevel, bool> Filter
@@ -146,13 +155,14 @@ namespace Microsoft.Extensions.Logging.Console
             {
                 var hasLevel = !string.IsNullOrEmpty(logLevelString);
                 // Queue log message
-                _queueProcessor.EnqueueMessage(new LogMessageEntry()
+                QueueProcessor.EnqueueMessage(new LogMessageEntry()
                 {
                     Message = logBuilder.ToString(),
                     MessageColor = DefaultConsoleColor,
                     LevelString = hasLevel ? logLevelString : null,
                     LevelBackground = hasLevel ? logLevelColors.Background : null,
-                    LevelForeground = hasLevel ? logLevelColors.Foreground : null
+                    LevelForeground = hasLevel ? logLevelColors.Foreground : null,
+                    Console = Console
                 });
             }
 
