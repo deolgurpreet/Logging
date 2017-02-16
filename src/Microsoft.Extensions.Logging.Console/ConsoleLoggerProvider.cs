@@ -14,7 +14,7 @@ namespace Microsoft.Extensions.Logging.Console
 
         private readonly Func<string, LogLevel, bool> _filter;
         private IConsoleLoggerSettings _settings;
-        private ConsoleLoggerProcessor _messageQueue = new ConsoleLoggerProcessor();
+        private readonly ConsoleLoggerProcessor _messageQueue = new ConsoleLoggerProcessor();
 
         public ConsoleLoggerProvider(Func<string, LogLevel, bool> filter, bool includeScopes)
         {

@@ -17,7 +17,7 @@ namespace Microsoft.Extensions.Logging.Console
         // ConsoleColor does not have a value to specify the 'Default' color
         private readonly ConsoleColor? DefaultConsoleColor = null;
 
-        private ConsoleLoggerProcessor _queueProcessor;
+        private readonly ConsoleLoggerProcessor _queueProcessor;
         private Func<string, LogLevel, bool> _filter;
 
         [ThreadStatic]
